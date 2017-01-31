@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+function usage {
+    echo "Usage:"
+    echo "  ${0} help       Show this screen"
+    echo "  ${0} list       List problems in recommended order"
+    echo "  ${0} problems   Check problems"
+    echo "  ${0} solutions  Check solutions"
+    echo "  ${0} <file.hx>  Check single file"
+}
+
+# Recommended order.
+declare -r problems="
+lists/IsEmpty.hx
+lists/HeadTail.hx
+lists/Length.hx
+lists/Product.hx
+lists/Reverse.hx
+"
+
+# Default to "help".
+declare -r option="${1:-help}"
+
+if [[ "${option}" == "help" ]]; then
+    usage
+    exit 0
+fi
+
+if [[ "${option}" == "list" ]]; then
+    # shellcheck disable=SC2086
+    echo ${problems} | tr " " "\n"
+    exit 0
+fi
+
+if [[ "${option}" == "problems" || "${option}" == "solutions" ]]; then
+    # Call itself on every file, exit on the first failure.
+    for problem in ${problems}; do
+        if [[ "${option}" == "solutions" ]]; then
+            problem="${problem/.hx/Solution.hx}"
+        fi
+        echo "Checking ${problem}"
+        declare cmd="${0} ${problem}"
+        if ! ${cmd} >/dev/null 2>&1; then
+            echo "  Failing tests"
+            echo "  ${cmd}"
+            exit 1
+        fi
+    done
+    
+    echo "All tests passed"
+    exit 0
+fi
+
+# .hx file is the only valid option remaining.
+declare -r hx="${option}"
+if [[ ! -r "${hx}" ]]; then
+    echo "Missing or not readable: ${hx}"
+    exit 1
+fi
+
+declare -r base="${hx%.hx}"
+declare -r csv="${base/Solution/}Test.csv"
+if [[ ! -r "${csv}" ]]; then
+    echo "Missing or not readable: ${csv}"
+    exit 1
+fi
+
+if ! type hacs >/dev/null 2>&1; then
+    echo "Missing command: hacs (check your \$PATH)"
+    exit 1
+fi
+
+echo "Compiling ${hx}"
+declare -r dir="$(dirname "${hx}")"
+declare -r src="$(basename "${hx}")"
+# HACS prefers running in the same directory as the sources.
+if ! (cd "${dir}" && hacs "${src}" >/dev/null 2>&1); then
+    # Chain with "true" to appease "errexit".
+    (cd "${dir}"; hacs --errors "${src}" || true)
+    echo "${hx} failed to compile"
+    exit 1
+fi
+
+echo "Running tests from ${csv}"
+declare -r run="${base}.run"
+if [[ ! -x "${run}" ]]; then
+    echo "Missing or not executable: ${run}"
+    exit 1
+fi
+
+declare -i total=0
+declare -i passed=0
+while IFS="," read scheme term expect; do
+    # Chain with "true" for "errexit", collapse spaces.
+    declare actual=$( ("${run}" --scheme="${scheme}" --term="${term}" \
+        2>/dev/null || true) | sed -e 's/^ *//' -e 's/ *$//' -e 's/ \+/ /g')
+    total=$((total + 1))
+
+    declare outcome="Test ${total}"
+    if [[ "${expect}" == "${actual}" ]]; then
+        outcome="${outcome} passed"
+        passed=$((passed + 1))
+    else
+        outcome="${outcome} failed"
+    fi
+
+    echo "${outcome}"
+    echo "  ./${run} --scheme=${scheme} --term='${term}'"
+    echo "  Expect: ${expect}"
+    echo "  Actual: ${actual}"
+done < "${csv}"
+
+echo "Passed ${passed}/${total} tests"
+if [[ ${passed} -eq ${total} ]]; then
+    exit 0
+else
+    exit 1
+fi
