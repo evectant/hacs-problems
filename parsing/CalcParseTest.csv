@@ -1,0 +1,7 @@
+Parse,2,2
+Parse,2 * 3,2 * 3
+Parse,3 / 2,3 / 2
+Parse,2 + 3,2 + 3
+Parse,2 - 3,2 - 3
+Parse,2 * 3 + 5,2 * 3 + 5
+Parse,2 - 3 / 5,2 - 3 / 5

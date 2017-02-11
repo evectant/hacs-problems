@@ -20,6 +20,8 @@ lists/HeadTail.hx
 lists/Length.hx
 lists/Product.hx
 lists/Reverse.hx
+parsing/CalcParse.hx
+parsing/CalcEval.hx
 "
 
 # Default to "help".
